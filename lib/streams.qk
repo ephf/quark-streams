@@ -1,0 +1,66 @@
+struct unistd {
+    isize extern read<T>(Int fd, T* buf, usize count);
+    isize extern write<T>(Int fd, T* buf, usize count);
+    Int extern pipe(Int* pipefd);
+    Int extern close(Int fd);
+}
+
+struct Stream {
+    Int fdin;
+    Int fdout;
+
+    Stream new() {
+        [Int] pipefd = [-1, -1];
+        unistd::pipe(pipefd.data);
+        return Stream { pipefd[1], pipefd[0] };
+    }
+
+    Stream from(Int fd) {
+        return Stream { fd, fd };
+    }
+
+    Stream from2(Int fdin, Int fdout) {
+        return Stream { fdin, fdout };
+    }
+
+    isize read_chunk_into(self, usize count, String* into) {
+        into->vector.reserve(count);
+        isize bytes_read = unistd::read(self.fdout, into->vector.data + into->vector.size, count);
+        into->vector.size += bytes_read;
+        return bytes_read;
+    }
+
+    String read_chunk(self, usize count, usize bufsize) {
+        if(!bufsize) bufsize = 65536;
+        String buffer = String::new();
+        buffer.vector.reserve(bufsize - 1);
+
+        self.read_chunk_into(bufsize, &buffer);
+        return buffer;
+    }
+
+    void read_into(self, String* into, usize bufsize) {
+        if(!bufsize) bufsize = 65536;
+        into->vector.reserve(bufsize);
+
+        usize chunk_size = bufsize;
+        while(self.read_chunk_into(chunk_size, into) == chunk_size) {
+            into->vector.reserve(chunk_size = into->vector.capacity);
+        }
+    }
+
+    String read(self, usize bufsize) {
+        String buffer = String::new();
+        self.read_into(&buffer, bufsize);
+        return buffer;
+    }
+
+    void write(self, str data) {
+        unistd::write(self.fdin, data.data(), data.len());
+    }
+
+    void close(self) {
+        unistd::close(self.fdin);
+        if(self.fdin != self.fdout) unistd::close(self.fdout);
+    }
+}
